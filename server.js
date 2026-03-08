@@ -23,7 +23,28 @@ const verifyGithubSignature = (githubSignature, rawBody) => {
     return crypto.timingSafeEqual(a, b)
 }
 
-app.post("/webhook", (req, res) => {
+const processWebhook = async (event, payload) => {
+    try {
+        const transformed = await transformEvent(event, payload)
+        await logEvent(transformed)
+    } catch (error) {
+        console.error("Pipeline error: ", error)
+    }
+}
+
+const transformEvent = async (event, payload) => {
+    return {
+        type: event,
+        repo: payload.repository?.full_name || 'unknown',
+        receivedAt: new Date().toISOString()
+    }
+}
+
+const logEvent = async (data) => {
+    console.log("Processed event: ", data)
+}
+
+app.post("/webhook", async (req, res) => {
     const event = req.headers["x-github-event"];
     const signature = req.headers["x-hub-signature-256"]
     if (!signature) return false
@@ -32,10 +53,7 @@ app.post("/webhook", (req, res) => {
         return res.sendStatus(401)
     }
 
-    console.log(new Date().toISOString(), req.body);
-
-    console.log("Event:", event);
-    console.log("Payload:", req.body);
+    await processWebhook(event, req.body)
 
     res.sendStatus(200);
 });
