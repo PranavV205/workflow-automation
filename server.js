@@ -1,12 +1,16 @@
+require('dotenv').config()
+
 const express = require('express')
 
 const app = express()
-const PORT = 3000
+const PORT = process.env.PORT || 3000
 
 app.use(express.json())
 
 app.post("/webhook", (req, res) => {
     const event = req.headers["x-github-event"];
+
+    console.log(req)
 
     console.log(new Date().toISOString(), req.body);
 
