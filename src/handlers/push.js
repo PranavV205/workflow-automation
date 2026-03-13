@@ -1,13 +1,17 @@
-const webhookEmitter = require('../services/webhookEmitter')
+const handlePush = async (jobData) => {
+    const { deliveryId, payload, receivedAt } = jobData
 
-webhookEmitter.on('push', async (event) => {
-    const { repo, sender, raw } = event
-    const branch = raw.ref?.replace('refs/heads/', '') || 'unknown'
-    const commitCount = raw.commits?.length || 0
+    const repo = payload.repository?.full_name || 'unknown'
+    const sender = payload.sender?.login || 'unknown'
+    const branch = payload.ref?.replace('refs/heads/', '') || 'unknown'
+    const commitCount = payload.commits?.length || 0
 
     console.log(`[push] ${sender} pushed ${commitCount} commit(s) to ${branch} on ${repo}`)
-})
+    console.log(`[push] delivery=${deliveryId} receivedAt=${receivedAt}`)
 
-webhookEmitter.on('push', async (event) => {
-    console.log(`[push:audit] Delivery ${event.deliveryId} logged at ${event.receivedAt}`)
-})
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    console.log(`[push] Finished processing delivery ${deliveryId}`)
+}
+
+module.exports = handlePush

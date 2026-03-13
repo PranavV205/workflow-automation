@@ -8,6 +8,12 @@ const extractEventData = (req, res, next) => {
         return next(err)
     }
 
+    if (!deliveryId) {
+        const err = new Error('Missing x-github-delivery header')
+        err.statusCode = 400
+        return next(err)
+    }
+
     req.githubEvent = {
         type,
         deliveryId,

@@ -3,11 +3,8 @@ const router = express.Router()
 
 const verifyGithubSignature = require('../middleware/verifyGithubSignature')
 const extractEventData = require('../middleware/extractEventData')
-const { runPipeline } = require('../services/eventPipeline')
-const webhookEmitter = require('../services/webhookEmitter')
 
-require('../handlers/push')
-require('../handlers/pullRequest')
+const { webhookQueue } = require('../queue/webhookQueue')
 
 router.post('/',
     verifyGithubSignature,
@@ -16,13 +13,16 @@ router.post('/',
         try {
             const { type, deliveryId, payload } = req.githubEvent
 
-            const processedEvent = await runPipeline({ type, deliveryId, payload })
+            await webhookQueue.add(type, {
+                type,
+                deliveryId,
+                payload,
+                receivedAt: new Date().toISOString(),
+            }, {
+                jobId: deliveryId,
+            })
 
-            if (webhookEmitter.listenerCount(type) > 0) {
-                webhookEmitter.emit(type, processedEvent)
-            } else {
-                webhookEmitter.emit('unhandled', { type, payload })
-            }
+            console.log(`[webhook] Enqueued job — event: ${type}, delivery: ${deliveryId}`)
 
             res.sendStatus(200)
         } catch (error) {
