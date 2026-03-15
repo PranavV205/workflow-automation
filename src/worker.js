@@ -2,31 +2,17 @@ require('dotenv').config()
 
 const { Worker, QueueEvents } = require('bullmq')
 const connection = require('./redis/redis')
-const handlePush = require('./handlers/push')
-const handlePullRequest = require('./handlers/pullRequest')
-
-const handlers = {
-    'push': handlePush,
-    'pull_request': handlePullRequest
-}
+const { runWorkflow } = require('./workflow/workflowRunner')
 
 const worker = new Worker('webhook-events', async (job) => {
-    console.log(`[worker] Picked up job — name: ${job.name}, id: ${job.id}, attempt: ${job.attemptsMade + 1}`)
+    console.log(`[worker] Picked up — name: ${job.name}, id: ${job.id}, attempt: ${job.attemptsMade + 1}`)
 
-    const handler = handlers[job.name]
+    await runWorkflow(job.data)
 
-    if (typeof handler !== 'function') {
-        const handlerType = handler === undefined ? 'undefined' : typeof handler
-        console.warn(`[worker] No valid handler for event type: "${job.name}" (resolved type: ${handlerType}) — skipping`)
-        return
-    }
-
-    await handler(job.data)
-
-    console.log(`[worker] Completed job — name: ${job.name}, id: ${job.id}`)
+    console.log(`[worker] Finished — name: ${job.name}, id: ${job.id}`)
 }, {
     connection,
-    concurrency: 5
+    concurrency: 5,
 })
 
 const queueEvents = new QueueEvents('webhook-events', { connection })
