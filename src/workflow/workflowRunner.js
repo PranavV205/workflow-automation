@@ -2,9 +2,9 @@ const workflowState = require('./workflowState')
 const STEPS = require('./workflowSteps')
 
 const runWorkflow = async (jobData) => {
-    const { workflowId } = jobData
+    const { workflowId, deliveryId } = jobData
 
-    console.log(`\n[workflow] Starting — id: ${workflowId}`)
+    console.log(`\n[workflow] Starting — workflowId=${workflowId} deliveryId=${deliveryId}`)
 
     const context = { ...jobData }
 
@@ -33,14 +33,18 @@ const runWorkflow = async (jobData) => {
                 error: error.message
             })
 
-            console.error(`[workflow] ✗ Step "${step.name}" failed: ${error.message}`)
+            console.error(
+                `[workflow] ✗ Step failed — step=${step.name} workflowId=${workflowId} deliveryId=${deliveryId} error=${error.message}`
+            )
 
             throw error
         }
     }
 
     const finalState = await workflowState.get(workflowId)
-    console.log(`[workflow] ✓ Completed — id: ${workflowId} status: ${finalState.status}\n`)
+    console.log(
+        `[workflow] ✓ Completed — workflowId=${workflowId} deliveryId=${deliveryId} status=${finalState.status}\n`
+    )
 
     return finalState
 }

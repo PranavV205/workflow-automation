@@ -31,7 +31,9 @@ router.post('/',
                 jobId: deliveryId,
             })
 
-            console.log(`[webhook] Enqueued — event: ${type}, workflowId: ${workflowId}`)
+            console.log(
+                `[webhook] Enqueued — event=${type} jobId=${deliveryId} workflowId=${workflowId}`
+            )
 
             res.status(200).json({ workflowId })
         } catch (error) {

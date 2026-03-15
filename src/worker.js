@@ -5,11 +5,16 @@ const connection = require('./redis/redis')
 const { runWorkflow } = require('./workflow/workflowRunner')
 
 const worker = new Worker('webhook-events', async (job) => {
-    console.log(`[worker] Picked up — name: ${job.name}, id: ${job.id}, attempt: ${job.attemptsMade + 1}`)
+    const { workflowId, deliveryId } = job.data
+    console.log(
+        `[worker] Picked up — event=${job.name} jobId=${job.id} deliveryId=${deliveryId} workflowId=${workflowId} attempt=${job.attemptsMade + 1}`
+    )
 
     await runWorkflow(job.data)
 
-    console.log(`[worker] Finished — name: ${job.name}, id: ${job.id}`)
+    console.log(
+        `[worker] Finished — event=${job.name} jobId=${job.id} deliveryId=${deliveryId} workflowId=${workflowId}`
+    )
 }, {
     connection,
     concurrency: 5,
@@ -18,15 +23,15 @@ const worker = new Worker('webhook-events', async (job) => {
 const queueEvents = new QueueEvents('webhook-events', { connection })
 
 queueEvents.on('completed', ({ jobId }) => {
-    console.log(`[queueEvents] ✓ Job completed — id: ${jobId}`)
+    console.log(`[queueEvents] ✓ Job completed — jobId=${jobId}`)
 })
 
 queueEvents.on('failed', ({ jobId, failedReason }) => {
-    console.error(`[queueEvents] ✗ Job failed — id: ${jobId}, reason: ${failedReason}`)
+    console.error(`[queueEvents] ✗ Job failed — jobId=${jobId} reason=${failedReason}`)
 })
 
 queueEvents.on('retries-exhausted', ({ jobId, failedReason }) => {
-    console.error(`[queueEvents] ✗✗ Retries exhausted — id: ${jobId}, reason: ${failedReason}`)
+    console.error(`[queueEvents] ✗✗ Retries exhausted — jobId=${jobId} reason=${failedReason}`)
 })
 
 const shutdown = async (signal) => {
