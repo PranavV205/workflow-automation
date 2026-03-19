@@ -6,6 +6,8 @@ const captureRawBody = require('./middleware/rawBody')
 const errorHandler = require('./middleware/errorHandler')
 const webhookRouter = require('./routes/webhook')
 const workflowRouter = require('./routes/workflowStatus')
+const adminRouter = require('./routes/admin')
+const log = require('./utils/logger')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -14,9 +16,10 @@ app.use(captureRawBody(express))
 
 app.use("/webhook", webhookRouter);
 app.use('/workflow', workflowRouter)
+app.use('/admin', adminRouter)
 
 app.use(errorHandler)
 
 app.listen(PORT, () => {
-    console.log(`server running on port ${PORT}`)
+    log.info('server.started', { port: PORT })
 })

@@ -5,6 +5,7 @@ const verifyGithubSignature = require('../middleware/verifyGithubSignature')
 const extractEventData = require('../middleware/extractEventData')
 const { webhookQueue } = require('../queue/webhookQueue')
 const workflowState = require('../workflow/workflowState')
+const log = require('../utils/logger')
 
 router.post('/',
     verifyGithubSignature,
@@ -15,11 +16,19 @@ router.post('/',
 
             const workflowId = `workflow:${deliveryId}`
 
-            await workflowState.create(workflowId, {
+            const created = await workflowState.create(workflowId, {
                 deliveryId,
                 eventType: type,
                 repo: payload.repository?.full_name ?? 'unknown',
             })
+
+            if (!created) {
+                log.info('webhook.duplicate', { deliveryId, workflowId })
+                return res.status(200).json({
+                    workflowId,
+                    status: 'duplicate; already processing',
+                })
+            }
 
             await webhookQueue.add(type, {
                 type,
@@ -31,9 +40,11 @@ router.post('/',
                 jobId: deliveryId,
             })
 
-            console.log(
-                `[webhook] Enqueued — event=${type} jobId=${deliveryId} workflowId=${workflowId}`
-            )
+            log.info('webhook.enqueued', {
+                event: type,
+                deliveryId,
+                workflowId,
+            })
 
             res.status(200).json({ workflowId })
         } catch (error) {

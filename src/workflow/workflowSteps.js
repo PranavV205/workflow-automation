@@ -1,7 +1,20 @@
-const fetchMetadata = async (context) => {
-    const { payload, type } = context
+const { UnrecoverableError } = require('bullmq')
+const log = require('../utils/logger')
 
-    console.log(`  [step:fetchMetadata] Extracting metadata from "${type}" payload`)
+const fetchMetadata = async (context) => {
+    const { payload, type, workflowId } = context
+
+    if (!payload) {
+        throw new UnrecoverableError(
+            `Payload is missing — cannot process "${type}" event (workflowId=${workflowId})`
+        )
+    }
+
+    if (!payload.repository) {
+        throw new UnrecoverableError(
+            `Payload missing "repository" field — malformed webhook (workflowId=${workflowId})`
+        )
+    }
 
     const metadata = {
         repo: payload.repository?.full_name ?? 'unknown',
@@ -14,15 +27,24 @@ const fetchMetadata = async (context) => {
 
     metadata.isDefaultBranch = metadata.branch === metadata.defaultBranch
 
-    console.log(`  [step:fetchMetadata] repo=${metadata.repo} branch=${metadata.branch} commits=${metadata.commitCount}`)
+    log.info('step.fetchMetadata', {
+        workflowId,
+        repo: metadata.repo,
+        branch: metadata.branch,
+        commits: metadata.commitCount,
+    })
 
     return metadata
 }
 
 const transformData = async (context) => {
-    const { type, deliveryId, receivedAt, fetchMetadata: meta } = context
+    const { type, deliveryId, receivedAt, workflowId, fetchMetadata: meta } = context
 
-    console.log(`  [step:transformData] Building enriched event for repo="${meta.repo}"`)
+    if (!meta) {
+        throw new UnrecoverableError(
+            `transformData requires fetchMetadata output — step ordering error (workflowId=${workflowId})`
+        )
+    }
 
     const transformed = {
         eventType: type,
@@ -39,20 +61,25 @@ const transformData = async (context) => {
             : `${meta.sender} triggered "${type}" on ${meta.repo}`,
     }
 
-    console.log(`  [step:transformData] summary="${transformed.summary}"`)
+    log.info('step.transformData', {
+        workflowId,
+        summary: transformed.summary,
+    })
 
     return transformed
 }
 
 const logSummary = async (context) => {
-    const { transformData: data } = context
+    const { transformData: data, workflowId } = context
 
-    console.log(`  [step:logSummary] ✓ Workflow complete`)
-    console.log(`  [step:logSummary]   event:    ${data.eventType}`)
-    console.log(`  [step:logSummary]   repo:     ${data.repository}`)
-    console.log(`  [step:logSummary]   actor:    ${data.actor}`)
-    console.log(`  [step:logSummary]   summary:  ${data.summary}`)
-    console.log(`  [step:logSummary]   delivery: ${data.deliveryId}`)
+    log.info('step.logSummary', {
+        workflowId,
+        eventType: data.eventType,
+        repository: data.repository,
+        actor: data.actor,
+        summary: data.summary,
+        deliveryId: data.deliveryId,
+    })
 
     return {
         logged: true,

@@ -3,36 +3,72 @@ require('dotenv').config()
 const { Worker, QueueEvents } = require('bullmq')
 const connection = require('./redis/redis')
 const { runWorkflow } = require('./workflow/workflowRunner')
+const { webhookQueue } = require('./queue/webhookQueue')
+const log = require('./utils/logger')
 
 const worker = new Worker('webhook-events', async (job) => {
     const { workflowId, deliveryId } = job.data
-    console.log(
-        `[worker] Picked up — event=${job.name} jobId=${job.id} deliveryId=${deliveryId} workflowId=${workflowId} attempt=${job.attemptsMade + 1}`
-    )
+
+    log.info('worker.picked_up', {
+        event: job.name,
+        jobId: job.id,
+        deliveryId,
+        workflowId,
+        attempt: job.attemptsMade + 1,
+        maxAttempts: job.opts.attempts,
+    })
 
     await runWorkflow(job.data)
 
-    console.log(
-        `[worker] Finished — event=${job.name} jobId=${job.id} deliveryId=${deliveryId} workflowId=${workflowId}`
-    )
+    log.info('worker.finished', {
+        event: job.name,
+        jobId: job.id,
+        deliveryId,
+        workflowId,
+    })
 }, {
     connection,
     concurrency: 5,
+    stalledInterval: 30_000,
+    maxStalledCount: 2,
 })
 
 const queueEvents = new QueueEvents('webhook-events', { connection })
 
 queueEvents.on('completed', ({ jobId }) => {
-    console.log(`[queueEvents] ✓ Job completed — jobId=${jobId}`)
+    log.info('job.completed', { jobId })
 })
 
 queueEvents.on('failed', ({ jobId, failedReason }) => {
-    console.error(`[queueEvents] ✗ Job failed — jobId=${jobId} reason=${failedReason}`)
+    log.error('job.failed', { jobId, reason: failedReason })
 })
 
 queueEvents.on('retries-exhausted', ({ jobId, failedReason }) => {
-    console.error(`[queueEvents] ✗✗ Retries exhausted — jobId=${jobId} reason=${failedReason}`)
+    log.error('job.retries_exhausted', {
+        jobId,
+        reason: failedReason,
+        action: 'JOB_IN_DLQ — needs manual inspection or replay',
+    })
 })
+
+queueEvents.on('stalled', ({ jobId }) => {
+    log.warn('job.stalled', {
+        jobId,
+        message: 'Worker stopped heartbeating; job returned to waiting queue',
+    })
+})
+
+const HEALTH_CHECK_INTERVAL = 60_000
+setInterval(async () => {
+    try {
+        const counts = await webhookQueue.getJobCounts(
+            'waiting', 'active', 'completed', 'failed', 'delayed', 'stalled'
+        )
+        log.info('queue.health', counts)
+    } catch (err) {
+        log.error('queue.health_check_failed', { error: err.message })
+    }
+}, HEALTH_CHECK_INTERVAL)
 
 const shutdown = async (signal) => {
     console.log(`[worker] ${signal} received — shutting down gracefully`)

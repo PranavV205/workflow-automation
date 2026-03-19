@@ -1,4 +1,5 @@
 const connection = require('../redis/redis')
+const log = require('../utils/logger')
 
 const key = (workflowId) => `workflow:${workflowId}`
 const indexKey = (deliveryId) => `workflow-by-delivery:${deliveryId}`
@@ -16,7 +17,15 @@ const create = async (workflowId, initialData) => {
         ...initialData
     }
 
-    await connection.set(key(workflowId), JSON.stringify(workflow), 'EX', 86400 * 3)  // 3 days
+    const created = await connection.set(key(workflowId), JSON.stringify(workflow), 'EX', 86400 * 3, 'NX')  // 3 days
+
+    if (!created) {
+        log.info('workflow.create_skipped', {
+            workflowId,
+            reason: 'Already exists — duplicate delivery',
+        })
+        return null
+    }
 
     await connection.set(indexKey(initialData.deliveryId), workflowId, 'EX', 86400 * 3)
 

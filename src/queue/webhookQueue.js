@@ -4,13 +4,17 @@ const connection = require('../redis/redis')
 const webhookQueue = new Queue("webhook-events", {
     connection,
     defaultJobOptions: {
-        attempts: 3,                 // retry up to 3 times on failure
+        attempts: 5,
         backoff: {
             type: 'exponential',
-            delay: 1000              // 1s → 2s → 4s between retry attempts
+            delay: 2000
         },
-        removeOnComplete: 100,       // keep last 100 completed jobs in Redis
-        removeOnFail: 500,           // keep last 500 failed jobs for debugging
+        timeout: 30_000,
+        removeOnComplete: {
+            age: 24 * 3600,
+            count: 1000,
+        },
+        removeOnFail: false,
     }
 })
 
