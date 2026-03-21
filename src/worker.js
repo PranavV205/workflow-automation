@@ -59,7 +59,7 @@ queueEvents.on('stalled', ({ jobId }) => {
 })
 
 const HEALTH_CHECK_INTERVAL = 60_000
-setInterval(async () => {
+const healthCheckInterval = setInterval(async () => {
     try {
         const counts = await webhookQueue.getJobCounts(
             'waiting', 'active', 'completed', 'failed', 'delayed', 'stalled'
@@ -72,7 +72,9 @@ setInterval(async () => {
 
 const shutdown = async (signal) => {
     console.log(`[worker] ${signal} received — shutting down gracefully`)
+    clearInterval(healthCheckInterval)
     await worker.close()
+    await queueEvents.close()
     console.log('[worker] All in-flight jobs finished — exiting')
     process.exit(0)
 }

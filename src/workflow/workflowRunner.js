@@ -66,6 +66,16 @@ const runWorkflow = async (jobData) => {
     }
 
     const finalState = await workflowState.get(workflowId)
+
+    if (!finalState) {
+        log.warn('workflow.state_expired', {
+            workflowId,
+            deliveryId,
+            message: 'Workflow state not found in Redis; key may have expired',
+        })
+        return { workflowId, status: 'unknown', expired: true }
+    }
+
     log.info('workflow.completed', {
         workflowId,
         deliveryId,

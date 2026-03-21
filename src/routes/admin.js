@@ -16,8 +16,10 @@ router.get('/queue/health', async (req, res, next) => {
 
 router.get('/queue/failed', async (req, res, next) => {
     try {
-        const start = parseInt(req.query.start) || 0
-        const end = parseInt(req.query.end) || 19
+        const parsedStart = parseInt(req.query.start)
+        const parsedEnd = parseInt(req.query.end)
+        const start = Number.isNaN(parsedStart) ? 0 : parsedStart
+        const end = Number.isNaN(parsedEnd) ? 19 : parsedEnd
 
         const failedJobs = await webhookQueue.getFailed(start, end)
 
@@ -40,7 +42,9 @@ router.get('/queue/failed', async (req, res, next) => {
 
 router.post('/queue/replay-failed', async (req, res, next) => {
     try {
-        const failedJobs = await webhookQueue.getFailed(0, -1)
+        const parsedLimit = parseInt(req.query.limit)
+        const limit = Number.isNaN(parsedLimit) ? 100 : Math.min(parsedLimit, 1000)
+        const failedJobs = await webhookQueue.getFailed(0, limit - 1)
 
         let replayed = 0
         for (const job of failedJobs) {
@@ -48,8 +52,8 @@ router.post('/queue/replay-failed', async (req, res, next) => {
             replayed++
         }
 
-        log.info('admin.replay_failed', { replayed })
-        res.json({ replayed })
+        log.info('admin.replay_failed', { replayed, limit })
+        res.json({ replayed, limit })
     } catch (err) {
         next(err)
     }
