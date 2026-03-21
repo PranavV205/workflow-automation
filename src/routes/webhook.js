@@ -14,31 +14,40 @@ router.post('/',
         try {
             const { type, deliveryId, payload } = req.githubEvent
 
-            const workflowId = `workflow:${deliveryId}`
-
-            const created = await workflowState.create(workflowId, {
-                deliveryId,
+            const workflow = await workflowState.create(deliveryId, {
                 eventType: type,
                 repo: payload.repository?.full_name ?? 'unknown',
             })
 
-            if (!created) {
-                log.info('webhook.duplicate', { deliveryId, workflowId })
+            if (!workflow) {
+                log.info('webhook.duplicate', { deliveryId })
                 return res.status(200).json({
-                    workflowId,
+                    deliveryId,
                     status: 'duplicate; already processing',
                 })
             }
 
-            await webhookQueue.add(type, {
-                type,
-                deliveryId,
-                workflowId,
-                payload,
-                receivedAt: new Date().toISOString(),
-            }, {
-                jobId: deliveryId,
-            })
+            const { workflowId } = workflow
+
+            try {
+                await webhookQueue.add(type, {
+                    type,
+                    deliveryId,
+                    workflowId,
+                    payload,
+                    receivedAt: new Date().toISOString(),
+                }, {
+                    jobId: deliveryId,
+                })
+            } catch (enqueueError) {
+                log.error('webhook.enqueue_failed', {
+                    deliveryId,
+                    workflowId,
+                    error: enqueueError.message,
+                })
+                await workflowState.del(workflowId, deliveryId)
+                throw enqueueError
+            }
 
             log.info('webhook.enqueued', {
                 event: type,
