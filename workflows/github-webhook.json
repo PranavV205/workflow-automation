@@ -1,0 +1,36 @@
+{
+  "id": "github-webhook-processor",
+  "name": "GitHub Webhook Processor",
+  "version": "1.0.0",
+  "trigger": {
+    "type": "webhook",
+    "source": "github"
+  },
+  "nodes": [
+    {
+      "id": "fetch-metadata",
+      "type": "fetchMetadata",
+      "name": "Fetch Metadata"
+    },
+    {
+      "id": "transform-data",
+      "type": "transformData",
+      "name": "Transform Data"
+    },
+    {
+      "id": "log-summary",
+      "type": "logSummary",
+      "name": "Log Summary"
+    }
+  ],
+  "edges": [
+    {
+      "from": "fetch-metadata",
+      "to": "transform-data"
+    },
+    {
+      "from": "transform-data",
+      "to": "log-summary"
+    }
+  ]
+}

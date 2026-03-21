@@ -1,28 +1,32 @@
 const connection = require('../redis/redis')
 const log = require('../utils/logger')
-const STEPS = require('./workflowSteps')
 
 const toWorkflowId = (deliveryId) => `workflow:${deliveryId}`
 const indexKey = (deliveryId) => `workflow-by-delivery:${deliveryId}`
 
-const create = async (deliveryId, initialData) => {
+const create = async (deliveryId, initialData, definition) => {
     const workflowId = toWorkflowId(deliveryId)
+
+    const nodeEntries = definition.nodes.map(n => [n.id, { status: 'pending' }])
 
     const workflow = {
         ...initialData,
         workflowId,
         deliveryId,
+        workflowDefinition: definition.id,
         status: 'running',
         createdAt: new Date().toISOString(),
-        steps: Object.fromEntries(STEPS.map(s => [s.name, { status: 'pending' }])),
+        nodes: Object.fromEntries(nodeEntries),
     }
 
-    const created = await connection.set(workflowId, JSON.stringify(workflow), 'EX', 86400 * 3, 'NX')  // 3 days
+    const created = await connection.set(
+        workflowId, JSON.stringify(workflow), 'EX', 86400 * 3, 'NX'
+    )
 
     if (!created) {
         log.info('workflow.create_skipped', {
             workflowId,
-            reason: 'Already exists — duplicate delivery',
+            reason: 'Already exists, duplicate delivery',
         })
         return null
     }
@@ -32,19 +36,19 @@ const create = async (deliveryId, initialData) => {
     return workflow
 }
 
-const update = async (workflowId, stepName, stepData) => {
+const update = async (workflowId, nodeId, nodeData) => {
     const raw = await connection.get(workflowId)
     if (!raw) throw new Error(`Workflow not found: ${workflowId}`)
 
     const workflow = JSON.parse(raw)
 
-    workflow.steps[stepName] = {
-        ...workflow.steps[stepName],
-        ...stepData,
-        updatedAt: new Date().toISOString()
+    workflow.nodes[nodeId] = {
+        ...workflow.nodes[nodeId],
+        ...nodeData,
+        updatedAt: new Date().toISOString(),
     }
 
-    const statuses = Object.values(workflow.steps).map(s => s.status)
+    const statuses = Object.values(workflow.nodes).map(n => n.status)
     if (statuses.some(s => s === 'failed')) workflow.status = 'failed'
     else if (statuses.every(s => s === 'completed')) workflow.status = 'completed'
     else workflow.status = 'running'
@@ -65,7 +69,6 @@ const get = async (workflowId) => {
 const getByDelivery = async (deliveryId) => {
     const workflowId = await connection.get(indexKey(deliveryId))
     if (!workflowId) return null
-
     return get(workflowId)
 }
 

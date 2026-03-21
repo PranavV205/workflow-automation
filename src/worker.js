@@ -1,10 +1,22 @@
 require('dotenv').config()
 
+const path = require('path')
 const { Worker, QueueEvents } = require('bullmq')
 const connection = require('./redis/redis')
 const { runWorkflow } = require('./workflow/workflowRunner')
+const { loadWorkflow } = require('./workflow/workflowLoader')
 const { webhookQueue } = require('./queue/webhookQueue')
 const log = require('./utils/logger')
+
+const definition = loadWorkflow(
+    path.join(__dirname, '..', 'workflows', 'github-webhook.json')
+)
+log.info('worker.workflow_loaded', {
+    id: definition.id,
+    name: definition.name,
+    nodeCount: definition.nodes.length,
+    edgeCount: definition.edges.length,
+})
 
 const worker = new Worker('webhook-events', async (job) => {
     const { workflowId, deliveryId } = job.data
@@ -18,7 +30,7 @@ const worker = new Worker('webhook-events', async (job) => {
         maxAttempts: job.opts.attempts,
     })
 
-    await runWorkflow(job.data)
+    await runWorkflow(job.data, definition)
 
     log.info('worker.finished', {
         event: job.name,
@@ -47,7 +59,7 @@ queueEvents.on('retries-exhausted', ({ jobId, failedReason }) => {
     log.error('job.retries_exhausted', {
         jobId,
         reason: failedReason,
-        action: 'JOB_IN_DLQ — needs manual inspection or replay',
+        action: 'JOB_IN_DLQ: needs manual inspection or replay',
     })
 })
 
@@ -71,15 +83,15 @@ const healthCheckInterval = setInterval(async () => {
 }, HEALTH_CHECK_INTERVAL)
 
 const shutdown = async (signal) => {
-    console.log(`[worker] ${signal} received — shutting down gracefully`)
+    console.log(`[worker] ${signal} received, shutting down gracefully`)
     clearInterval(healthCheckInterval)
     await worker.close()
     await queueEvents.close()
-    console.log('[worker] All in-flight jobs finished — exiting')
+    console.log('[worker] All in-flight jobs finished, exiting')
     process.exit(0)
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'))
 process.on('SIGINT', () => shutdown('SIGINT'))
 
-console.log('[worker] Started — waiting for jobs (concurrency: 5)')
+console.log('[worker] Started, waiting for jobs (concurrency: 5)')

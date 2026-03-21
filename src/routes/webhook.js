@@ -1,3 +1,4 @@
+const path = require('path')
 const express = require('express')
 const router = express.Router()
 
@@ -5,7 +6,12 @@ const verifyGithubSignature = require('../middleware/verifyGithubSignature')
 const extractEventData = require('../middleware/extractEventData')
 const { webhookQueue } = require('../queue/webhookQueue')
 const workflowState = require('../workflow/workflowState')
+const { loadWorkflow } = require('../workflow/workflowLoader')
 const log = require('../utils/logger')
+
+const definition = loadWorkflow(
+    path.join(__dirname, '..', '..', 'workflows', 'github-webhook.json')
+)
 
 router.post('/',
     verifyGithubSignature,
@@ -17,7 +23,7 @@ router.post('/',
             const workflow = await workflowState.create(deliveryId, {
                 eventType: type,
                 repo: payload.repository?.full_name ?? 'unknown',
-            })
+            }, definition)
 
             if (!workflow) {
                 log.info('webhook.duplicate', { deliveryId })

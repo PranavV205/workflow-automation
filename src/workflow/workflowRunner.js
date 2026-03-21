@@ -1,61 +1,75 @@
 const workflowState = require('./workflowState')
-const STEPS = require('./workflowSteps')
+const { getHandler } = require('./nodeHandlers')
+const { resolveExecutionOrder } = require('./graphEngine')
 const log = require('../utils/logger')
 
-const runWorkflow = async (jobData) => {
+const runWorkflow = async (jobData, definition) => {
     const { workflowId, deliveryId } = jobData
 
-    log.info('workflow.started', { workflowId, deliveryId })
+    log.info('workflow.started', {
+        workflowId,
+        deliveryId,
+        workflowDef: definition.id,
+    })
+
+    const executionOrder = resolveExecutionOrder(definition)
+
+    const nodeMap = new Map(definition.nodes.map(n => [n.id, n]))
 
     const context = { ...jobData }
 
-    for (const step of STEPS) {
+    for (const nodeId of executionOrder) {
+        const node = nodeMap.get(nodeId)
+        const handler = getHandler(node.type)
         const stepStart = Date.now()
 
-        log.info('workflow.step_started', {
+        log.info('workflow.node_started', {
             workflowId,
             deliveryId,
-            step: step.name,
+            nodeId: node.id,
+            nodeType: node.type,
         })
 
-        await workflowState.update(workflowId, step.name, {
+        await workflowState.update(workflowId, node.id, {
             status: 'running',
-            startedAt: new Date().toISOString()
+            startedAt: new Date().toISOString(),
         })
 
         try {
-            const output = await step.fn(context)
+            const output = await handler(context)
 
-            context[step.name] = output
+            context[node.type] = output
 
             const duration_ms = Date.now() - stepStart
 
-            await workflowState.update(workflowId, step.name, {
+            await workflowState.update(workflowId, node.id, {
                 status: 'completed',
                 completedAt: new Date().toISOString(),
-                output
+                output,
             })
 
-            log.info('workflow.step_completed', {
+            log.info('workflow.node_completed', {
                 workflowId,
                 deliveryId,
-                step: step.name,
+                nodeId: node.id,
+                nodeType: node.type,
                 duration_ms,
             })
         } catch (error) {
             const duration_ms = Date.now() - stepStart
 
-            await workflowState.update(workflowId, step.name, {
+            await workflowState.update(workflowId, node.id, {
                 status: 'failed',
                 failedAt: new Date().toISOString(),
                 duration_ms,
-                error: error.message
+                error: error.message,
             })
 
-            log.error('workflow.step_failed', {
+            log.error('workflow.node_failed', {
                 workflowId,
                 deliveryId,
-                step: step.name,
+                nodeId: node.id,
+                nodeType: node.type,
                 duration_ms,
                 error: error.message,
                 stack: error.stack,

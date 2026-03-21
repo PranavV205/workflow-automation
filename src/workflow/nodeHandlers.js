@@ -6,13 +6,13 @@ const fetchMetadata = async (context) => {
 
     if (!payload) {
         throw new UnrecoverableError(
-            `Payload is missing — cannot process "${type}" event (workflowId=${workflowId})`
+            `Payload is missing: cannot process "${type}" event (workflowId=${workflowId})`
         )
     }
 
     if (!payload.repository) {
         throw new UnrecoverableError(
-            `Payload missing "repository" field — malformed webhook (workflowId=${workflowId})`
+            `Payload missing "repository" field, malformed webhook (workflowId=${workflowId})`
         )
     }
 
@@ -61,7 +61,7 @@ const transformData = async (context) => {
 
     if (!meta) {
         throw new UnrecoverableError(
-            `transformData requires fetchMetadata output — step ordering error (workflowId=${workflowId})`
+            `transformData requires fetchMetadata output; step ordering error (workflowId=${workflowId})`
         )
     }
 
@@ -101,7 +101,7 @@ const logSummary = async (context) => {
 
     if (!data) {
         throw new UnrecoverableError(
-            `logSummary requires transformData output — step ordering error (workflowId=${workflowId})`
+            `logSummary requires transformData output; step ordering error (workflowId=${workflowId})`
         )
     }
 
@@ -120,10 +120,18 @@ const logSummary = async (context) => {
     }
 }
 
-const STEPS = [
-    { name: 'fetchMetadata', fn: fetchMetadata },
-    { name: 'transformData', fn: transformData },
-    { name: 'logSummary', fn: logSummary },
-]
+const handlers = {
+    fetchMetadata,
+    transformData,
+    logSummary,
+}
 
-module.exports = STEPS
+const getHandler = (type) => {
+    const handler = handlers[type]
+    if (!handler) {
+        throw new Error(`Unknown node type: "${type}"; no handler registered`)
+    }
+    return handler
+}
+
+module.exports = { handlers, getHandler }
