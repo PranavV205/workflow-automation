@@ -16,10 +16,29 @@ const fetchMetadata = async (context) => {
         )
     }
 
+    let branch = null
+    let tag = null
+    let refType = null
+
+    if (payload.ref) {
+        if (payload.ref.startsWith('refs/tags/')) {
+            tag = payload.ref.replace('refs/tags/', '')
+            refType = 'tag'
+        } else if (payload.ref.startsWith('refs/heads/')) {
+            branch = payload.ref.replace('refs/heads/', '')
+            refType = 'branch'
+        } else {
+            branch = payload.ref
+            refType = 'other'
+        }
+    }
+
     const metadata = {
         repo: payload.repository?.full_name ?? 'unknown',
         sender: payload.sender?.login ?? 'unknown',
-        branch: payload.ref?.replace('refs/heads/', '') ?? null,
+        branch,
+        tag,
+        refType,
         commitCount: payload.commits?.length ?? 0,
         defaultBranch: payload.repository?.default_branch ?? 'main',
         isDefaultBranch: false,
@@ -46,19 +65,27 @@ const transformData = async (context) => {
         )
     }
 
+    let summary
+    if (type === 'push' && meta.branch) {
+        summary = `${meta.sender} pushed ${meta.commitCount} commit(s) to ${meta.branch} on ${meta.repo}`
+    } else if (type === 'push' && meta.tag) {
+        summary = `${meta.sender} pushed tag ${meta.tag} on ${meta.repo}`
+    } else {
+        summary = `${meta.sender} triggered "${type}" on ${meta.repo}`
+    }
+
     const transformed = {
         eventType: type,
         deliveryId,
         repository: meta.repo,
         actor: meta.sender,
         branch: meta.branch,
+        tag: meta.tag,
         commitCount: meta.commitCount,
         isDefaultBranch: meta.isDefaultBranch,
         receivedAt,
         processedAt: new Date().toISOString(),
-        summary: meta.branch
-            ? `${meta.sender} pushed ${meta.commitCount} commit(s) to ${meta.branch} on ${meta.repo}`
-            : `${meta.sender} triggered "${type}" on ${meta.repo}`,
+        summary,
     }
 
     log.info('step.transformData', {
@@ -71,6 +98,12 @@ const transformData = async (context) => {
 
 const logSummary = async (context) => {
     const { transformData: data, workflowId } = context
+
+    if (!data) {
+        throw new UnrecoverableError(
+            `logSummary requires transformData output — step ordering error (workflowId=${workflowId})`
+        )
+    }
 
     log.info('step.logSummary', {
         workflowId,
