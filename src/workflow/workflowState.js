@@ -36,29 +36,66 @@ const create = async (deliveryId, initialData, definition) => {
     return workflow
 }
 
+const ATOMIC_UPDATE_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then
+    return nil
+end
+
+local workflow = cjson.decode(raw)
+local nodeId = ARGV[1]
+local nodeData = cjson.decode(ARGV[2])
+local now = ARGV[3]
+
+if not workflow.nodes then
+    workflow.nodes = {}
+end
+if not workflow.nodes[nodeId] then
+    workflow.nodes[nodeId] = {}
+end
+
+for k, v in pairs(nodeData) do
+    workflow.nodes[nodeId][k] = v
+end
+workflow.nodes[nodeId]['updatedAt'] = now
+
+local hasFailed = false
+local allDone = true
+for _, node in pairs(workflow.nodes) do
+    if node.status == 'failed' then
+        hasFailed = true
+    end
+    if node.status ~= 'completed' and node.status ~= 'skipped' then
+        allDone = false
+    end
+end
+
+if hasFailed then
+    workflow.status = 'failed'
+elseif allDone then
+    workflow.status = 'completed'
+    workflow.completedAt = now
+else
+    workflow.status = 'running'
+end
+
+local encoded = cjson.encode(workflow)
+redis.call('SET', KEYS[1], encoded, 'KEEPTTL')
+return encoded
+`
+
 const update = async (workflowId, nodeId, nodeData) => {
-    const raw = await connection.get(workflowId)
-    if (!raw) throw new Error(`Workflow not found: ${workflowId}`)
+    const result = await connection.eval(
+        ATOMIC_UPDATE_SCRIPT,
+        1,
+        workflowId,
+        nodeId,
+        JSON.stringify(nodeData),
+        new Date().toISOString()
+    )
 
-    const workflow = JSON.parse(raw)
-
-    workflow.nodes[nodeId] = {
-        ...workflow.nodes[nodeId],
-        ...nodeData,
-        updatedAt: new Date().toISOString(),
-    }
-
-    const statuses = Object.values(workflow.nodes).map(n => n.status)
-    if (statuses.some(s => s === 'failed')) workflow.status = 'failed'
-    else if (statuses.every(s => s === 'completed')) workflow.status = 'completed'
-    else workflow.status = 'running'
-
-    if (workflow.status === 'completed') {
-        workflow.completedAt = new Date().toISOString()
-    }
-
-    await connection.set(workflowId, JSON.stringify(workflow), 'KEEPTTL')
-    return workflow
+    if (!result) throw new Error(`Workflow not found: ${workflowId}`)
+    return JSON.parse(result)
 }
 
 const get = async (workflowId) => {

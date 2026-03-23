@@ -1,7 +1,7 @@
 {
   "id": "github-webhook-processor",
   "name": "GitHub Webhook Processor",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "trigger": {
     "type": "webhook",
     "source": "github"
@@ -13,6 +13,11 @@
       "name": "Fetch Metadata"
     },
     {
+      "id": "validate-payload",
+      "type": "validatePayload",
+      "name": "Validate Payload"
+    },
+    {
       "id": "transform-data",
       "type": "transformData",
       "name": "Transform Data"
@@ -21,16 +26,17 @@
       "id": "log-summary",
       "type": "logSummary",
       "name": "Log Summary"
+    },
+    {
+      "id": "send-notification",
+      "type": "sendNotification",
+      "name": "Send Notification"
     }
   ],
   "edges": [
-    {
-      "from": "fetch-metadata",
-      "to": "transform-data"
-    },
-    {
-      "from": "transform-data",
-      "to": "log-summary"
-    }
+    { "from": "fetch-metadata", "to": "transform-data" },
+    { "from": "validate-payload", "to": "transform-data" },
+    { "from": "transform-data", "to": "log-summary" },
+    { "from": "transform-data", "to": "send-notification" }
   ]
 }

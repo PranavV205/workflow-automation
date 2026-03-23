@@ -56,12 +56,60 @@ const fetchMetadata = async (context) => {
     return metadata
 }
 
+const validatePayload = async (context) => {
+    const { payload, type, workflowId } = context
+
+    if (!payload) {
+        throw new UnrecoverableError(
+            `Payload is missing: cannot validate "${type}" event (workflowId=${workflowId})`
+        )
+    }
+
+    const errors = []
+
+    if (!payload.repository) errors.push('missing "repository"')
+    if (!payload.sender) errors.push('missing "sender"')
+
+    if (type === 'push') {
+        if (!payload.ref) errors.push('push event missing "ref"')
+        if (!Array.isArray(payload.commits)) errors.push('push event missing "commits" array')
+    }
+
+    const valid = errors.length === 0
+
+    log.info('step.validatePayload', {
+        workflowId,
+        type,
+        valid,
+        errorCount: errors.length,
+        errors: errors.length > 0 ? errors : undefined,
+    })
+
+    if (!valid) {
+        throw new UnrecoverableError(
+            `Payload validation failed (workflowId=${workflowId}): ${errors.join('; ')}`
+        )
+    }
+
+    return { valid, validatedAt: new Date().toISOString() }
+}
+
 const transformData = async (context) => {
-    const { type, deliveryId, receivedAt, workflowId, fetchMetadata: meta } = context
+    const {
+        type, deliveryId, receivedAt, workflowId,
+        fetchMetadata: meta,
+        validatePayload: validation,
+    } = context
 
     if (!meta) {
         throw new UnrecoverableError(
             `transformData requires fetchMetadata output; step ordering error (workflowId=${workflowId})`
+        )
+    }
+
+    if (!validation) {
+        throw new UnrecoverableError(
+            `transformData requires validatePayload output; step ordering error (workflowId=${workflowId})`
         )
     }
 
@@ -83,6 +131,7 @@ const transformData = async (context) => {
         tag: meta.tag,
         commitCount: meta.commitCount,
         isDefaultBranch: meta.isDefaultBranch,
+        validated: validation.valid,
         receivedAt,
         processedAt: new Date().toISOString(),
         summary,
@@ -120,10 +169,36 @@ const logSummary = async (context) => {
     }
 }
 
+const sendNotification = async (context) => {
+    const { transformData: data, workflowId } = context
+
+    if (!data) {
+        throw new UnrecoverableError(
+            `sendNotification requires transformData output; step ordering error (workflowId=${workflowId})`
+        )
+    }
+
+    log.info('step.sendNotification', {
+        workflowId,
+        channel: 'log',
+        repository: data.repository,
+        actor: data.actor,
+        summary: data.summary,
+    })
+
+    return {
+        sent: true,
+        channel: 'log',
+        sentAt: new Date().toISOString(),
+    }
+}
+
 const handlers = {
     fetchMetadata,
+    validatePayload,
     transformData,
     logSummary,
+    sendNotification,
 }
 
 const getHandler = (type) => {
