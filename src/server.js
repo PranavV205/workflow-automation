@@ -7,6 +7,7 @@ const errorHandler = require('./middleware/errorHandler')
 const webhookRouter = require('./routes/webhook')
 const workflowRouter = require('./routes/workflowStatus')
 const adminRouter = require('./routes/admin')
+const authRouter = require('./routes/auth')
 const log = require('./utils/logger')
 
 const app = express()
@@ -17,6 +18,7 @@ app.use(captureRawBody(express))
 app.use("/webhook", webhookRouter);
 app.use('/workflow', workflowRouter)
 app.use('/admin', adminRouter)
+app.use('/auth', authRouter)
 
 app.use(errorHandler)
 
