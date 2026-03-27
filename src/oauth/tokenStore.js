@@ -1,5 +1,6 @@
 const connection = require('../redis/redis')
 const log = require('../utils/logger')
+const { encrypt, decrypt } = require('../utils/credentialCrypto')
 
 const toTokenKey = (userId) => `oauth:gmail:${userId}`
 
@@ -14,15 +15,16 @@ const save = async (userId, tokenData) => {
     }
 
     const key = toTokenKey(userId)
+    const ciphertext = encrypt(JSON.stringify(record))
 
     await connection.set(
         key,
-        JSON.stringify(record),
+        ciphertext,
         'EX',
         86400 * 30
     )
 
-    log.info('tokenStore.saved', { userId, scope: record.scope })
+    log.info('tokenStore.saved', { userId, scope: record.scope, encrypted: true })
 
     return record
 }
@@ -33,10 +35,12 @@ const get = async (userId) => {
 
     if (!raw) return null
 
-    const record = JSON.parse(raw)
+    const record = JSON.parse(decrypt(raw))
 
     const expiresAt = record.savedAt + (record.expiresIn * 1000)
     const isExpired = Date.now() > (expiresAt - 60000)
+
+    log.info('tokenStore.decrypted', { userId, isExpired })
 
     return {
         ...record,
