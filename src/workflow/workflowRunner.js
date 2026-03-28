@@ -1,6 +1,7 @@
 const workflowState = require('./workflowState')
 const { getHandler } = require('./nodeHandlers')
 const { resolveExecutionLevels, getDownstreamNodes } = require('./graphEngine')
+const { ensureFreshToken } = require('../middleware/tokenRefresh')
 const log = require('../utils/logger')
 
 const executeNode = async (nodeId, nodeMap, context, workflowId, deliveryId) => {
@@ -21,7 +22,20 @@ const executeNode = async (nodeId, nodeMap, context, workflowId, deliveryId) => 
     })
 
     try {
-        const output = await handler(context)
+        let nodeContext = context
+        if (node.credentials) {
+            const { provider = 'google', userId = 'default' } = node.credentials
+            const accessToken = await ensureFreshToken(userId, provider)
+            nodeContext = {
+                ...context,
+                credentials: {
+                    ...context.credentials,
+                    [provider]: { accessToken },
+                },
+            }
+        }
+
+        const output = await handler(nodeContext)
         const duration_ms = Date.now() - stepStart
 
         await workflowState.update(workflowId, node.id, {

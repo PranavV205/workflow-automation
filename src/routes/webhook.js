@@ -10,7 +10,7 @@ const { loadWorkflow } = require('../workflow/workflowLoader')
 const log = require('../utils/logger')
 
 const definition = loadWorkflow(
-    path.join(__dirname, '..', '..', 'workflows', 'github-webhook.json')
+    path.join(__dirname, '..', '..', 'workflows', 'gmail-notify.json')
 )
 
 router.post('/',

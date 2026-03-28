@@ -1,0 +1,40 @@
+{
+  "id": "gmail-notify",
+  "name": "GitHub Push → Gmail Notification",
+  "version": "1.0.0",
+  "trigger": {
+    "type": "webhook",
+    "source": "github"
+  },
+  "nodes": [
+    {
+      "id": "fetch-metadata",
+      "type": "fetchMetadata",
+      "name": "Fetch Metadata"
+    },
+    {
+      "id": "validate-payload",
+      "type": "validatePayload",
+      "name": "Validate Payload"
+    },
+    {
+      "id": "transform-data",
+      "type": "transformData",
+      "name": "Transform Data"
+    },
+    {
+      "id": "gmail-messages",
+      "type": "gmailListMessages",
+      "name": "List Gmail Messages",
+      "credentials": {
+        "provider": "google",
+        "userId": "default"
+      }
+    }
+  ],
+  "edges": [
+    { "from": "fetch-metadata", "to": "transform-data" },
+    { "from": "validate-payload", "to": "transform-data" },
+    { "from": "transform-data", "to": "gmail-messages" }
+  ]
+}

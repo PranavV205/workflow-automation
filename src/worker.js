@@ -9,7 +9,7 @@ const { webhookQueue } = require('./queue/webhookQueue')
 const log = require('./utils/logger')
 
 const definition = loadWorkflow(
-    path.join(__dirname, '..', 'workflows', 'github-webhook.json')
+    path.join(__dirname, '..', 'workflows', 'gmail-notify.json')
 )
 log.info('worker.workflow_loaded', {
     id: definition.id,

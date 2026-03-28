@@ -193,12 +193,53 @@ const sendNotification = async (context) => {
     }
 }
 
+const gmailListMessages = async (context) => {
+    const { workflowId } = context
+    const accessToken = context.credentials?.google?.accessToken
+
+    if (!accessToken) {
+        throw new UnrecoverableError(
+            `gmailListMessages requires Google credentials in context (workflowId=${workflowId})`
+        )
+    }
+
+    const response = await fetch(
+        'https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5',
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+    )
+
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        const message = `Gmail API error ${response.status}: ${err.error?.message ?? response.statusText}`
+        if (response.status >= 400 && response.status < 500) {
+            throw new UnrecoverableError(message)
+        }
+        throw new Error(message)
+    }
+
+    const data = await response.json()
+    const messageIds = (data.messages ?? []).map(m => m.id)
+
+    log.info('step.gmailListMessages', {
+        workflowId,
+        resultSizeEstimate: data.resultSizeEstimate ?? 0,
+        fetched: messageIds.length,
+    })
+
+    return {
+        messageIds,
+        resultSizeEstimate: data.resultSizeEstimate ?? 0,
+        fetchedAt: new Date().toISOString(),
+    }
+}
+
 const handlers = {
     fetchMetadata,
     validatePayload,
     transformData,
     logSummary,
     sendNotification,
+    gmailListMessages,
 }
 
 const getHandler = (type) => {
