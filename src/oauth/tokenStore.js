@@ -37,10 +37,11 @@ const get = async (provider, userId) => {
 
     const record = JSON.parse(decrypt(raw))
 
-    const expiresAt = record.savedAt + (record.expiresIn * 1000)
-    const isExpired = Date.now() > (expiresAt - 60000)
+    const hasExpiry = record.expiresIn != null
+    const expiresAt = hasExpiry ? record.savedAt + (record.expiresIn * 1000) : null
+    const isExpired = hasExpiry && Date.now() > (expiresAt - 60000)
 
-    log.info('tokenStore.decrypted', { provider, userId, isExpired })
+    log.info('tokenStore.decrypted', { provider, userId, hasExpiry, isExpired })
 
     return {
         ...record,
